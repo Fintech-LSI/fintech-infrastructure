@@ -1,7 +1,4 @@
-provider "aws" {
-  alias  = "us_east_1"
-  region = "us-east-1"
-}
+
 
 resource "aws_ecrpublic_repository" "user-service" {
   provider         = aws.us_east_1
@@ -22,6 +19,6 @@ resource "aws_ecrpublic_repository" "user-service" {
   }
 }
 
-output "repository_uri" {
+output "repository_user" {
   value = aws_ecrpublic_repository.user-service.repository_uri
 }
