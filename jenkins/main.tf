@@ -47,6 +47,7 @@ resource "aws_instance" "jenkins" {
   associate_public_ip_address = true
 
   user_data = file("script.sh")
+  iam_instance_profile = aws_iam_instance_profile.jenkins_profile.name
 
   tags = {
     Name = "jenkins-instance"
@@ -84,4 +85,39 @@ resource "aws_iam_instance_profile" "jenkins_profile" {
   name = "jenkins-instance-profile"
   role = aws_iam_role.jenkins_eks_role.name
 }
+# Additional policies for EKS management
+resource "aws_iam_role_policy_attachment" "jenkins_eks_service_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSServicePolicy"
+  role       = aws_iam_role.jenkins_eks_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "jenkins_eks_worker_node_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+  role       = aws_iam_role.jenkins_eks_role.name
+}
+
+# Policy for Kubernetes API access
+resource "aws_iam_role_policy" "jenkins_eks_kubectl" {
+  name = "jenkins-eks-kubectl"
+  role = aws_iam_role.jenkins_eks_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "eks:DescribeCluster",
+          "eks:ListClusters",
+          "eks:DescribeNodegroup",
+          "eks:ListNodegroups",
+          "eks:ListUpdates",
+          "eks:AccessKubernetesApi"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 

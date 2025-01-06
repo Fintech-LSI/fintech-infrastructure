@@ -1,14 +1,22 @@
 provider "aws" {
   region = var.region
 }
-
+data "aws_iam_role" "jenkins_eks_role" {
+  name = "jenkins-eks-role"  # Replace with the actual name of your Jenkins role in AWS
+}
 data "aws_vpc" "main" {
   filter {
     name   = "tag:Name"
     values = ["main-vpc"]
   }
 }
-
+data "kubernetes_config_map" "aws_auth" {
+  metadata {
+    name      = "aws-auth"
+    namespace = "kube-system"
+  }
+  depends_on = [aws_eks_cluster.main]
+}
 data "aws_subnets" "public" {
   filter {
     name   = "vpc-id"
@@ -181,7 +189,74 @@ resource "aws_iam_role_policy_attachment" "eks_node_AmazonEC2ContainerRegistryRe
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
   role       = aws_iam_role.eks_node_role.name
 }
+# Create aws-auth ConfigMap to map IAM roles to Kubernetes RBAC
+resource "kubernetes_config_map_v1_data" "aws_auth_update" {
+  metadata {
+    name      = "aws-auth"
+    namespace = "kube-system"
+  }
 
+  data = {
+    mapRoles = yamlencode([
+      {
+        rolearn  = aws_iam_role.eks_node_role.arn
+        username = "system:node:{{EC2PrivateDNSName}}"
+        groups   = ["system:bootstrappers", "system:nodes"]
+      },
+      {
+        rolearn  = data.aws_iam_role.jenkins_eks_role.arn
+        username = "jenkins"
+        groups   = ["system:masters"]
+      }
+    ])
+    mapUsers = yamlencode([
+      {
+        userarn  = "arn:aws:iam::640168414375:user/fintech"
+        username = "fintech"
+        groups   = ["system:masters"]
+      }
+    ])
+  }
+
+  force = true
+  depends_on = [
+    aws_eks_cluster.main,
+    data.kubernetes_config_map.aws_auth
+  ]
+}
+
+
+
+
+# Add RBAC role binding for Jenkins
+resource "kubernetes_cluster_role_binding" "jenkins" {
+  metadata {
+    name = "jenkins-role-binding"
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = "cluster-admin"
+  }
+
+  subject {
+    kind      = "User"
+    name      = "jenkins"
+    api_group = "rbac.authorization.k8s.io"
+  }
+
+  depends_on = [aws_eks_cluster.main]
+}
+provider "kubernetes" {
+  host                   = aws_eks_cluster.main.endpoint
+  cluster_ca_certificate = base64decode(aws_eks_cluster.main.certificate_authority[0].data)
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    args        = ["eks", "get-token", "--cluster-name", aws_eks_cluster.main.name]
+    command     = "aws"
+  }
+}
 resource "aws_ecr_repository" "main" {
   name = "microservice-repo"
 }
