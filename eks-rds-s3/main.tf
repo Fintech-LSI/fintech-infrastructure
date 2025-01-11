@@ -95,17 +95,9 @@ resource "aws_db_instance" "main" {
   publicly_accessible  = true
 
   vpc_security_group_ids = [data.aws_security_group.eks.id]
-  db_subnet_group_name   = aws_db_subnet_group.main.name
+  db_subnet_group_name = "main-db-subnet-group"
 }
 
-resource "aws_db_subnet_group" "main" {
-  name       = "main-db-subnet-group"
-  subnet_ids = data.aws_subnets.public.ids
-
-  tags = {
-    Name = "Main DB subnet group"
-  }
-}
 
 resource "aws_s3_bucket" "main" {
   bucket = var.s3_bucket_name
@@ -190,7 +182,7 @@ resource "aws_iam_role_policy_attachment" "eks_node_AmazonEC2ContainerRegistryRe
   role       = aws_iam_role.eks_node_role.name
 }
 # Create aws-auth ConfigMap to map IAM roles to Kubernetes RBAC
-resource "kubernetes_config_map_v1_data" "aws_auth_update" {
+resource "kubernetes_config_map" "aws_auth" {
   metadata {
     name      = "aws-auth"
     namespace = "kube-system"
@@ -218,13 +210,8 @@ resource "kubernetes_config_map_v1_data" "aws_auth_update" {
     ])
   }
 
-  force = true
-  depends_on = [
-    aws_eks_cluster.main,
-    data.kubernetes_config_map.aws_auth
-  ]
+  depends_on = [aws_eks_cluster.main]
 }
-
 
 
 
@@ -260,4 +247,60 @@ provider "kubernetes" {
 resource "aws_ecr_repository" "main" {
   name = "microservice-repo"
 }
+# Create a security group for RDS
+resource "aws_security_group" "rds_sg" {
+  name        = "rds-security-group"
+  description = "Security group for RDS PostgreSQL instance"
+  vpc_id      = data.aws_vpc.main.id
+
+  ingress {
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]  # Note: In production, limit this to specific IP ranges
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "rds-sg"
+  }
+}
+
+# Create the RDS instance
+resource "aws_db_instance" "postgres" {
+  identifier           = "postgres-instance"
+  engine               = "postgres"
+ engine_version           = "14" # Choose a version that's eligible for free tier
+  instance_class       = "db.t3.micro"  # Free tier eligible
+  allocated_storage    = 20  # Free tier offers 20 GB
+  storage_type         = "gp2"
+  username             = "postgres"
+  password             = "password"  # Note: Use a secure method to manage passwords in production
+parameter_group_name = "default.postgres14"
+skip_final_snapshot  = true
+
+  vpc_security_group_ids = [aws_security_group.rds_sg.id]
+  db_subnet_group_name   = aws_db_subnet_group.postgres.name
+
+  tags = {
+    Name = "postgres-rds-instance"
+  }
+}
+
+# Create a subnet group for RDS
+resource "aws_db_subnet_group" "postgres" {
+  name       = "postgres-subnet-group"
+  subnet_ids = data.aws_subnets.public.ids
+
+  tags = {
+    Name = "Postgres DB subnet group"
+  }
+}
+
 
