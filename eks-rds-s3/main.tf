@@ -88,8 +88,8 @@ resource "aws_db_instance" "main" {
   engine               = "mysql"
   engine_version       = "8.0"
   instance_class       = "db.t3.micro"
-  username             = "foo"
-  password             = "foobarbaz"
+  username             = "root"
+  password             = "password"
   parameter_group_name = "default.mysql8.0"  # Updated to match MySQL 8.0
   skip_final_snapshot  = true
   publicly_accessible  = true
@@ -136,12 +136,12 @@ resource "aws_eks_node_group" "main" {
   subnet_ids      = data.aws_subnets.public.ids
 
   scaling_config {
-    desired_size = 1
-    max_size     = 2
-    min_size     = 1
+    desired_size = 2
+    max_size     = 3
+    min_size     = 2
   }
 
-  instance_types = ["t3.small"]
+  instance_types = ["t3.medium"]
 
   depends_on = [
     aws_iam_role_policy_attachment.eks_node_AmazonEKSWorkerNodePolicy,
