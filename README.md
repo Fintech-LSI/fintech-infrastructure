@@ -51,7 +51,7 @@ This module configures a Virtual Private Cloud (VPC) and related security groups
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/fintech-infrastructure.git
+   git clone https://github.com/Fintech-LSI/fintech-infrastructure.git
    cd fintech-infrastructure
    ```
 
